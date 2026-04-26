@@ -1,4 +1,4 @@
-# tcp-scratch
+# http-scratch
 
 A from-scratch HTTP/1.1 request parser built on raw TCP, written in Go. This project explores low-level HTTP protocol handling at the socket level, following [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110) (HTTP Semantics) and [RFC 9112](https://www.rfc-editor.org/rfc/rfc9112) (HTTP/1.1).
 
