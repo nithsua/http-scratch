@@ -2,18 +2,23 @@ package request
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"slices"
 	"strings"
+
+	internalError "github.com/nithsua/tcp-scratch/internal/errors"
+	"github.com/nithsua/tcp-scratch/internal/headers"
 )
 
 type ParserState int
 
 const (
 	Initialized ParserState = iota
+	RequestStateParsingHeaders
 	Done
 )
+
+const bufferLength int = 1024
 
 type Request struct {
 	RequestLine RequestLine
@@ -24,12 +29,24 @@ type Request struct {
 
 func (r *Request) parse(data []byte) (int, error) {
 	r.parserState = Initialized
+	var n int = 0
+	var err error = nil
 
-	requestLine := RequestLine{}
-	n, err := parseRequestLine(data, &requestLine)
-	if n != 0 && err == nil {
-		r.RequestLine = requestLine
-		r.parserState = Done
+	switch r.parserState {
+	case Initialized:
+		requestLine := RequestLine{}
+		n, err = parseRequestLine(data, &requestLine)
+		if n != 0 && err == nil {
+			r.RequestLine = requestLine
+			r.parserState = RequestStateParsingHeaders
+		}
+	case RequestStateParsingHeaders:
+		headers := headers.NewHeaders()
+		n, err = parseHeaders(data, &headers)
+		if n == 0 && err == nil {
+			r.Headers = headers
+			r.parserState = Done
+		}
 	}
 
 	return n, err
@@ -48,7 +65,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	parsedSize := 0
 
 	filled := 0
-	requestBuffer := make([]byte, 8)
+	requestBuffer := make([]byte, bufferLength)
 	for request.parserState != Done {
 		bufferReadSize := 0
 		var err error = nil
@@ -60,14 +77,14 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		filled += bufferReadSize
 
 		bufferParsedSize, err := request.parse(requestBuffer)
-		if bufferParsedSize == 0 && err.Error() == "Unable to find CRLF" {
+		if bufferParsedSize == 0 && err == internalError.ErrNoCRLF {
 			requestBuffer = slices.Grow(requestBuffer, filled)
 			requestBuffer = requestBuffer[:len(requestBuffer)+filled]
 			continue
 		} else if err != nil {
 			return nil, err
 		}
-		requestBuffer = make([]byte, 8)
+		requestBuffer = make([]byte, bufferLength)
 		filled = 0
 		parsedSize += bufferParsedSize
 	}
@@ -76,11 +93,9 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 }
 
 func parseRequestLine(buffer []byte, requestLine *RequestLine) (int, error) {
-	stringval := string(buffer)
-	fmt.Println(stringval)
 	requestLineEOLIndex := strings.Index(string(buffer), "\r\n")
 	if requestLineEOLIndex == -1 {
-		return 0, errors.New("Unable to find CRLF")
+		return 0, internalError.ErrNoCRLF
 	}
 	requestLineByte := buffer[:requestLineEOLIndex]
 	parts := strings.Split(string(requestLineByte), " ")
@@ -107,4 +122,17 @@ func parseRequestLine(buffer []byte, requestLine *RequestLine) (int, error) {
 	requestLine.HttpVersion = httpParts[1]
 
 	return requestLineEOLIndex, nil
+}
+
+func parseHeaders(data []byte, headers *headers.Headers) (n int, err error) {
+	n, done, err := headers.Parse(data)
+	if err != nil {
+		return n, internalError.ErrNoCRLF
+	}
+
+	if done == true {
+		return 0, nil
+	}
+
+	return n, nil
 }

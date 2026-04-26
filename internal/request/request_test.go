@@ -47,13 +47,42 @@ func TestRequestLineParse(t *testing.T) {
 	_, err = RequestFromReader(strings.NewReader("GET /coffee HTTP/1.2\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n"))
 	require.Error(t, err)
 	assert.Equal(t, err.Error(), "Invalid HTTP version provided in request line")
+}
 
+func TestHeadersParse(t *testing.T) {
+	// "TODO: Standard Headers"
+	// "TODO: Empty Headers"
+	// "TODO: Malformed Header"
+	// "TODO: Duplicate Headers"
+	// "TODO: Case Insensitive Headers"
+	// "TODO: Missing End of Headers"
+}
+
+type chunkReader struct {
+	data            string
+	numBytesPerRead int
+	pos             int
+}
+
+func (cr *chunkReader) Read(p []byte) (n int, err error) {
+	if cr.pos >= len(cr.data) {
+		return 0, io.EOF
+	}
+
+	endIndex := min(cr.pos+cr.numBytesPerRead, len(cr.data))
+	n = copy(p, cr.data[cr.pos:endIndex])
+	cr.pos += n
+
+	return n, nil
+}
+
+func TestChunkRequestParsing(t *testing.T) {
 	// Test: GET Request line with chunk Reader
 	reader := &chunkReader{
 		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	r, err = RequestFromReader(reader)
+	r, err := RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
 	assert.Equal(t, "GET", r.RequestLine.Method)
@@ -84,23 +113,4 @@ func TestRequestLineParse(t *testing.T) {
 	assert.Equal(t, "POST", r.RequestLine.Method)
 	assert.Equal(t, "/coffee/bean", r.RequestLine.RequestTarget)
 	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
-
-}
-
-type chunkReader struct {
-	data            string
-	numBytesPerRead int
-	pos             int
-}
-
-func (cr *chunkReader) Read(p []byte) (n int, err error) {
-	if cr.pos >= len(cr.data) {
-		return 0, io.EOF
-	}
-
-	endIndex := min(cr.pos+cr.numBytesPerRead, len(cr.data))
-	n = copy(p, cr.data[cr.pos:endIndex])
-	cr.pos += n
-
-	return n, nil
 }

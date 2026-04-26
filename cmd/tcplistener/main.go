@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"strings"
+
+	"github.com/nithsua/tcp-scratch/internal/request"
 )
 
 // // RFC 9110
@@ -15,38 +15,6 @@ import (
 // // Specifically focuses on HTTP 1.1
 // //
 // // Fieldline by RFC basically denoted Headers
-
-func getLinesChannel(connection net.Conn) <-chan string {
-	channel := make(chan string)
-
-	go func() {
-		defer close(channel)
-		defer connection.Close()
-
-		lineBuffer := ""
-		for {
-			byteBuffer := make([]byte, 8)
-			n, err := connection.Read(byteBuffer)
-			if n < 8 || err == io.EOF {
-				channel <- string(lineBuffer + string(byteBuffer[:n]))
-				break
-			}
-			if err != nil {
-				log.Fatal("Error while reading file")
-			}
-
-			if index := strings.IndexByte(string(byteBuffer), '\n'); index != -1 {
-				channel <- string(lineBuffer + string(byteBuffer[:index]))
-				byteBuffer = byteBuffer[index+1:]
-				lineBuffer = ""
-			}
-			lineBuffer += string(byteBuffer)
-		}
-	}()
-
-	return channel
-}
-
 func main() {
 	port := ":42069"
 	listener, err := net.Listen("tcp", port)
@@ -61,10 +29,16 @@ func main() {
 			log.Fatal("Error while accepting connection")
 		}
 
-		lineChannel := getLinesChannel(connection)
-		for line := range lineChannel {
-			fmt.Printf("%s\n", line)
+		request, err := request.RequestFromReader(connection)
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n", request.RequestLine.Method)
+		fmt.Printf("- Target: %s\n", request.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", request.RequestLine.HttpVersion)
+		fmt.Println("Headers:")
+		for key, value := range request.Headers {
+			fmt.Printf("- %s: %s\n", key, value)
 		}
+
 		fmt.Println("Connection closed")
 	}
 }
