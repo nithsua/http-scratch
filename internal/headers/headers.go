@@ -55,7 +55,7 @@ func validateFieldName(fieldName []byte) error {
 	ch := byte(0)
 
 	for i, ch = range fieldName {
-		if !(slices.Contains(allowedSpecialAscii[:], uint8(ch)) &&
+		if !(slices.Contains(allowedSpecialAscii[:], uint8(ch)) ||
 			(ch >= 'a' && ch <= 'z' || // lowercase
 				ch >= 'A' && ch <= 'Z' || // uppercase
 				ch >= '0' && ch <= '9')) { // numerical

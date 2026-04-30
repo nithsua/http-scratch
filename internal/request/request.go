@@ -32,21 +32,24 @@ func (r *Request) parse(data []byte) (int, error) {
 	var n int = 0
 	var err error = nil
 
-	switch r.parserState {
-	case Initialized:
+	if r.parserState == Initialized {
 		requestLine := RequestLine{}
 		n, err = parseRequestLine(data, &requestLine)
 		if n != 0 && err == nil {
 			r.RequestLine = requestLine
 			r.parserState = RequestStateParsingHeaders
 		}
-	case RequestStateParsingHeaders:
+	}
+	if r.parserState == RequestStateParsingHeaders {
 		headers := headers.NewHeaders()
-		n, err = parseHeaders(data, &headers)
-		if n == 0 && err == nil {
+		unparsedData := data[n:]
+		m := 0
+		m, err = parseHeaders(unparsedData, &headers)
+		if err == nil {
 			r.Headers = headers
 			r.parserState = Done
 		}
+		n += m
 	}
 
 	return n, err
@@ -77,7 +80,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		filled += bufferReadSize
 
 		bufferParsedSize, err := request.parse(requestBuffer)
-		if bufferParsedSize == 0 && err == internalError.ErrNoCRLF {
+		if err == internalError.ErrNoCRLF {
 			requestBuffer = slices.Grow(requestBuffer, filled)
 			requestBuffer = requestBuffer[:len(requestBuffer)+filled]
 			continue
@@ -121,18 +124,19 @@ func parseRequestLine(buffer []byte, requestLine *RequestLine) (int, error) {
 	}
 	requestLine.HttpVersion = httpParts[1]
 
-	return requestLineEOLIndex, nil
+	return requestLineEOLIndex + 2, nil
 }
 
 func parseHeaders(data []byte, headers *headers.Headers) (n int, err error) {
-	n, done, err := headers.Parse(data)
-	if err != nil {
-		return n, internalError.ErrNoCRLF
+	n, done, err := 0, false, nil
+	for _, split := range strings.SplitAfter(string(data), "\r\n") {
+		m := 0
+		m, done, err = headers.Parse([]byte(split))
+		n += m
+		if err != nil || done == true {
+			break
+		}
 	}
 
-	if done == true {
-		return 0, nil
-	}
-
-	return n, nil
+	return n, err
 }

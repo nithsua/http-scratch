@@ -50,12 +50,54 @@ func TestRequestLineParse(t *testing.T) {
 }
 
 func TestHeadersParse(t *testing.T) {
-	// "TODO: Standard Headers"
-	// "TODO: Empty Headers"
-	// "TODO: Malformed Header"
-	// "TODO: Duplicate Headers"
-	// "TODO: Case Insensitive Headers"
-	// "TODO: Missing End of Headers"
+	// Test: Standard Headers
+	r, err := RequestFromReader(strings.NewReader("GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n"))
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "localhost:42069", r.Headers["host"])
+	assert.Equal(t, "curl/7.81.0", r.Headers["user-agent"])
+	assert.Equal(t, "*/*", r.Headers["accept"])
+
+	// Test: Empty Headers
+	r, err = RequestFromReader(strings.NewReader("GET / HTTP/1.1\r\n\r\n"))
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Empty(t, r.Headers)
+
+	// Test: Malformed Header
+	_, err = RequestFromReader(strings.NewReader("GET / HTTP/1.1\r\nHost localhost:42069\r\n\r\n"))
+	require.Error(t, err)
+
+	// Test: Duplicate Headers
+	r, err = RequestFromReader(strings.NewReader("GET / HTTP/1.1\r\nSet-Person: lane-loves-go\r\nSet-Person: prime-loves-zig\r\n\r\n"))
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "lane-loves-go, prime-loves-zig", r.Headers["set-person"])
+
+	// Test: Case Insensitive Headers
+	r, err = RequestFromReader(strings.NewReader("GET / HTTP/1.1\r\nHOST: localhost:42069\r\nContent-TYPE: application/json\r\n\r\n"))
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "localhost:42069", r.Headers["host"])
+	assert.Equal(t, "application/json", r.Headers["content-type"])
+
+	// Test: Missing End of Headers
+	_, err = RequestFromReader(&truncatedReader{data: []byte("GET / HTTP/1.1\r\nHost: localhost:42069\r\n")})
+	require.Error(t, err)
+}
+
+type truncatedReader struct {
+	data []byte
+	read bool
+}
+
+func (r *truncatedReader) Read(p []byte) (n int, err error) {
+	if !r.read {
+		n = copy(p, r.data)
+		r.read = true
+		return n, nil
+	}
+	return 0, io.ErrUnexpectedEOF
 }
 
 type chunkReader struct {
