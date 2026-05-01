@@ -1,4 +1,4 @@
-module github.com/nithsua/tcp-scratch
+module github.com/nithsua/http-scratch
 
 go 1.26.1
 

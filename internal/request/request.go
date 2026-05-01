@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	internalError "github.com/nithsua/tcp-scratch/internal/errors"
-	"github.com/nithsua/tcp-scratch/internal/headers"
+	internalError "github.com/nithsua/http-scratch/internal/errors"
+	"github.com/nithsua/http-scratch/internal/headers"
 )
 
 type ParserState int

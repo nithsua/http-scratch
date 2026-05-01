@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	internalError "github.com/nithsua/tcp-scratch/internal/errors"
+	internalError "github.com/nithsua/http-scratch/internal/errors"
 )
 
 type Headers map[string]string

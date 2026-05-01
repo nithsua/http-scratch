@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/nithsua/tcp-scratch/internal/request"
+	"github.com/nithsua/http-scratch/internal/request"
 )
 
 // // RFC 9110
@@ -28,7 +28,6 @@ func main() {
 		if err != nil {
 			log.Fatal("Error while accepting connection")
 		}
-
 		request, err := request.RequestFromReader(connection)
 		fmt.Println("Request line:")
 		fmt.Printf("- Method: %s\n", request.RequestLine.Method)
@@ -38,7 +37,8 @@ func main() {
 		for key, value := range request.Headers {
 			fmt.Printf("- %s: %s\n", key, value)
 		}
-
+		fmt.Println("Body:")
+		fmt.Println(string(request.Body))
 		fmt.Println("Connection closed")
 	}
 }
