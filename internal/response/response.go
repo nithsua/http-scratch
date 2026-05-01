@@ -40,7 +40,7 @@ func GetDefaultHeaders(contentLength int) headers.Headers {
 func WriteHeaders(w io.Writer, headers headers.Headers) error {
 	var err error = nil
 	for fieldName, fieldValue := range headers {
-		_, err = w.Write([]byte(fmt.Sprintf("%s: %s\r\n", fieldName, fieldValue)))
+		_, err = fmt.Fprintf(w, "%s: %s\r\n", fieldName, fieldValue)
 	}
 	w.Write([]byte("\r\n"))
 	return err
