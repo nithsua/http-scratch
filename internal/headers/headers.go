@@ -16,12 +16,12 @@ func NewHeaders() Headers {
 }
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
-	crlfIndex := strings.IndexAny(string(data), "\r\n")
+	crlfIndex := strings.Index(string(data), "\r\n")
 	if crlfIndex == -1 {
 		return 0, false, internalError.ErrNoCRLF
 	}
 	if crlfIndex == 0 {
-		return 0, true, nil
+		return 2, true, nil
 	}
 
 	seperatorIndex := strings.Index(string(data[:crlfIndex]), ":")

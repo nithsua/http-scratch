@@ -66,7 +66,7 @@ func TestHeadersParse(t *testing.T) {
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, 0, n)
+	assert.Equal(t, 2, n)
 	assert.True(t, done)
 
 	// Test: Mixed-case header keys are normalized to lowercase

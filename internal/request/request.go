@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 
 	internalError "github.com/nithsua/tcp-scratch/internal/errors"
@@ -14,7 +15,8 @@ type ParserState int
 
 const (
 	Initialized ParserState = iota
-	RequestStateParsingHeaders
+	ParsingHeaders
+	ParsingBody
 	Done
 )
 
@@ -27,6 +29,10 @@ type Request struct {
 	parserState ParserState
 }
 
+func (r *Request) Get(key string) string {
+	return r.Headers[strings.ToLower(key)]
+}
+
 func (r *Request) parse(data []byte) (int, error) {
 	r.parserState = Initialized
 	var n int = 0
@@ -37,22 +43,48 @@ func (r *Request) parse(data []byte) (int, error) {
 		n, err = parseRequestLine(data, &requestLine)
 		if n != 0 && err == nil {
 			r.RequestLine = requestLine
-			r.parserState = RequestStateParsingHeaders
+			r.parserState = ParsingHeaders
 		}
 	}
-	if r.parserState == RequestStateParsingHeaders {
+	if r.parserState == ParsingHeaders {
 		headers := headers.NewHeaders()
 		unparsedData := data[n:]
 		m := 0
-		m, err = parseHeaders(unparsedData, &headers)
+		m, err = parseHeaders(unparsedData, headers)
 		if err == nil {
 			r.Headers = headers
-			r.parserState = Done
+			r.parserState = ParsingBody
+			if r.Get("content-length") != "" {
+				r.parserState = ParsingBody
+			} else {
+				r.parserState = Done
+			}
 		}
 		n += m
 	}
-
+	if r.parserState == ParsingBody {
+		o := 0
+		o, err = r.parseBody(data[n:])
+		if err == nil {
+			r.parserState = Done
+		}
+		n += o
+	}
 	return n, err
+}
+
+func (r *Request) parseBody(data []byte) (int, error) {
+	bodyLength := len(data)
+	contentLength, err := strconv.Atoi(r.Get("content-length"))
+	if err != nil {
+		return 0, err
+	}
+	if (bodyLength + len(r.Body)) < contentLength {
+		return 0, internalError.ErrIncomplteRequestBody
+	}
+	contentLengthToRead := contentLength - len(r.Body)
+	r.Body = append(r.Body, data[:contentLengthToRead]...)
+	return contentLengthToRead, nil
 }
 
 type RequestLine struct {
@@ -69,9 +101,13 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 	filled := 0
 	requestBuffer := make([]byte, bufferLength)
+	var err error = nil
 	for request.parserState != Done {
 		bufferReadSize := 0
-		var err error = nil
+		if err == io.EOF && bufferReadSize == parsedSize && request.parserState != Done {
+			return nil, errors.Join(errors.New("EOF reached, Request has not been successfully parsed"), err)
+		}
+		err = nil
 		bufferReadSize, err = reader.Read(requestBuffer[filled:])
 		if err != nil && err != io.EOF {
 			return nil, errors.Join(errors.New("Error while reading from reader"), err)
@@ -79,10 +115,12 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readSize += bufferReadSize
 		filled += bufferReadSize
 
-		bufferParsedSize, err := request.parse(requestBuffer)
+		bufferParsedSize, err := request.parse(requestBuffer[:filled])
 		if err == internalError.ErrNoCRLF {
 			requestBuffer = slices.Grow(requestBuffer, filled)
 			requestBuffer = requestBuffer[:len(requestBuffer)+filled]
+			continue
+		} else if err == internalError.ErrIncomplteRequestBody {
 			continue
 		} else if err != nil {
 			return nil, err
@@ -127,16 +165,19 @@ func parseRequestLine(buffer []byte, requestLine *RequestLine) (int, error) {
 	return requestLineEOLIndex + 2, nil
 }
 
-func parseHeaders(data []byte, headers *headers.Headers) (n int, err error) {
-	n, done, err := 0, false, nil
-	for _, split := range strings.SplitAfter(string(data), "\r\n") {
-		m := 0
-		m, done, err = headers.Parse([]byte(split))
-		n += m
-		if err != nil || done == true {
-			break
+func parseHeaders(data []byte, headers headers.Headers) (int, error) {
+	dataLength := len(data)
+	parsedData := 0
+	for dataLength != parsedData {
+		n, done, err := headers.Parse(data[parsedData:])
+		parsedData += n
+		if err != nil {
+			return parsedData, err
+		}
+		if done == true {
+			return parsedData, nil
 		}
 	}
-
-	return n, err
+	// This happens only when out of loop and done is false
+	return parsedData, internalError.ErrNoCRLF
 }
