@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -12,6 +11,8 @@ import (
 	"github.com/nithsua/http-scratch/internal/request"
 	respone "github.com/nithsua/http-scratch/internal/response"
 )
+
+type Handler func(w io.Writer, req *request.Request) *HandlerError
 
 type ServerState int
 
@@ -63,39 +64,25 @@ func (s *Server) listen() {
 
 func (s *Server) handle(conn net.Conn) {
 	defer closeConnection(conn)
-	responseWriter := bufio.NewWriter(conn)
 
 	request, err := request.RequestFromReader(conn)
 	if err != nil {
 		handlerError := HandlerError{StatusCode: respone.InternalServerError, Message: err.Error()}
-		writeError(responseWriter, handlerError)
+		writeError(conn, handlerError)
 	}
 	printRequest(request)
 
 	responseBodyWriter := new(bytes.Buffer)
 	handlerError := s.handler(responseBodyWriter, request)
 	if handlerError != nil {
-		writeError(responseWriter, *handlerError)
-	} else {
-		if err := respone.WriteStatusLine(responseWriter, respone.Ok); err != nil {
-			log.Println("Error writing statusLine to response", err)
-			return
-		}
-
-		headers := respone.GetDefaultHeaders(responseBodyWriter.Len())
-		if err := respone.WriteHeaders(responseWriter, headers); err != nil {
-			log.Println("Error writing headers to response", err)
-			return
-		}
-
-		if _, err := fmt.Fprint(responseWriter, responseBodyWriter); err != nil {
-			log.Println("Error writing body to response")
-		}
+		writeError(conn, *handlerError)
+		return
 	}
 
-	if err := responseWriter.Flush(); err != nil {
-		log.Println("Error while headers to response", err)
-	}
+	respone.WriteStatusLine(conn, respone.Ok)
+	headers := respone.GetDefaultHeaders(responseBodyWriter.Len())
+	respone.WriteHeaders(conn, headers)
+	fmt.Fprint(conn, responseBodyWriter)
 }
 
 func printRequest(request *request.Request) {
@@ -111,33 +98,21 @@ func printRequest(request *request.Request) {
 	fmt.Println(string(request.Body))
 }
 
-func writeError(w io.Writer, error HandlerError) {
-	if err := respone.WriteStatusLine(w, error.StatusCode); err != nil {
-		log.Println("Error writing statusLine to response", err)
-		return
-	}
-
-	headers := respone.GetDefaultHeaders(len(error.Error()))
-	if err := respone.WriteHeaders(w, headers); err != nil {
-		log.Println("Error writing headers to response", err)
-		return
-	}
-
-	if _, err := fmt.Fprint(w, error.Error()); err != nil {
-		log.Println("Error writing body to response")
-	}
-}
-
 func closeConnection(conn net.Conn) {
 	conn.Close()
 	fmt.Println("Connection closed")
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
-
 type HandlerError struct {
 	StatusCode respone.StatusCode
 	Message    string
+}
+
+func (h HandlerError) writeError(w io.Writer) {
+	respone.WriteStatusLine(w, h.StatusCode)
+	headers := respone.GetDefaultHeaders(len(h.Error()))
+	respone.WriteHeaders(w, headers)
+	fmt.Fprint(w, h.Error())
 }
 
 func (h HandlerError) Error() string {
