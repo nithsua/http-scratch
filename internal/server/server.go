@@ -68,14 +68,14 @@ func (s *Server) handle(conn net.Conn) {
 	request, err := request.RequestFromReader(conn)
 	if err != nil {
 		handlerError := HandlerError{StatusCode: respone.InternalServerError, Message: err.Error()}
-		writeError(conn, handlerError)
+		handlerError.writeError(conn)
 	}
 	printRequest(request)
 
 	responseBodyWriter := new(bytes.Buffer)
 	handlerError := s.handler(responseBodyWriter, request)
 	if handlerError != nil {
-		writeError(conn, *handlerError)
+		handlerError.writeError(conn)
 		return
 	}
 
